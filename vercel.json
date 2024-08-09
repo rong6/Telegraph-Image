@@ -1,0 +1,8 @@
+{
+    "version": 2,
+    "routes": [
+      {"src": "/","dest": "/index.html"},
+      {"src": "/upload","dest": "https://telegra.ph/upload"},
+      {"src": "/file/(.*)","dest": "https://telegra.ph/file/$1"}
+    ]
+}

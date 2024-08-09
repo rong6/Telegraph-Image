@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegraph图床</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@2.3.0/dist/alpine.js"
+        integrity="sha512-nIwdJlD5/vHj23CbO2iHCXtsqzdTTx3e3uAmpTm4x2Y8xCIFyWu4cSIV8GaGe2UNVq86/1h9EgUZy7tn243qdA=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+</head>
+
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4" x-data="imageUploader()">
+    <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-4xl">
+        <h1 class="text-2xl font-bold mb-6 text-center text-gray-800">Telegraph图床</h1>
+
+        <div class="border-dashed border-2 border-gray-400 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 transition duration-300"
+            @click="$refs.fileInput.click()" @dragover.prevent="dragover = true" @dragleave.prevent="dragover = false"
+            @drop.prevent="handleDrop" @paste.prevent="handlePaste" :class="{'border-blue-500': dragover}">
+            <input type="file" class="hidden" x-ref="fileInput" @change="handleFileSelect" multiple accept="image/*">
+            <p class="text-gray-600">点击、拖拽或粘贴图片上传。</p>
+        </div>
+
+        <div class="mt-6" x-show="images.length > 0">
+            <h2 class="text-lg font-semibold mb-2 text-gray-700">上传列表</h2>
+            <ul class="space-y-2">
+                <template x-for="(image, index) in images" :key="index">
+                    <li class="flex items-center justify-between bg-gray-50 p-2 rounded">
+                        <div class="flex items-center">
+                            <img :src="image.preview" alt="预览" class="w-10 h-10 object-cover mr-2 rounded">
+                            <span x-text="image.name" class="text-sm text-gray-600 truncate"></span>
+                        </div>
+                        <span x-text="image.status" class="text-sm" :class="{
+                            'text-yellow-500': image.status === '等待中',
+                            'text-blue-500': image.status === '上传中',
+                            'text-green-500': image.status === '已完成',
+                            'text-red-500': image.status === '失败'
+                        }"></span>
+                    </li>
+                </template>
+            </ul>
+        </div>
+
+        <div class="mt-6 flex justify-between">
+            <button @click="uploadImages"
+                class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition duration-300"
+                :disabled="images.length === 0" :class="{'opacity-50 cursor-not-allowed': images.length === 0}">
+                上传图片
+            </button>
+            <button @click="clearImages"
+                class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition duration-300"
+                :disabled="images.length === 0" :class="{'opacity-50 cursor-not-allowed': images.length === 0}">
+                清空列表
+            </button>
+        </div>
+
+        <div class="mt-6" x-show="uploadedUrls.length > 0">
+            <div class="flex justify-between items-center mb-2">
+                <h2 class="text-lg font-semibold text-gray-700">上传结果</h2>
+                <button @click="copyAllUrls" class="text-sm text-blue-500 hover:text-blue-700">
+                    复制全部
+                </button>
+            </div>
+            <ul class="space-y-2">
+                <template x-for="(result, index) in uploadedUrls" :key="index">
+                    <li class="flex items-center justify-between bg-gray-50 p-2 rounded">
+                        <div class="flex items-center flex-grow mr-2">
+                            <img :src="result.preview" alt="预览" class="w-10 h-10 object-cover mr-2 rounded">
+                            <a :href="result.url" target="_blank" class="text-sm text-blue-500 hover:underline truncate"
+                                x-text="result.url"></a>
+                        </div>
+                        <button @click="copyToClipboard(result.url, $event)"
+                            class="text-sm text-gray-500 hover:text-gray-700 whitespace-nowrap">
+                            复制
+                        </button>
+                    </li>
+                </template>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        function imageUploader() {
+            return {
+                images: [],
+                uploadedUrls: [],
+                dragover: false,
+                handleDrop(e) {
+                    this.dragover = false;
+                    this.addFiles(e.dataTransfer.files);
+                },
+                handleFileSelect(e) {
+                    this.addFiles(e.target.files);
+                },
+                handlePaste(e) {
+                    const items = e.clipboardData.items;
+                    for (let item of items) {
+                        if (item.type.indexOf('image') !== -1) {
+                            const blob = item.getAsFile();
+                            this.addFiles([blob]);
+                        }
+                    }
+                },
+                addFiles(files) {
+                    for (let file of files) {
+                        if (file.type.startsWith('image/')) {
+                            const reader = new FileReader();
+                            reader.onload = (e) => {
+                                this.images.push({
+                                    file: file,
+                                    name: file.name || 'pasted-image.png',
+                                    status: '等待中',
+                                    preview: e.target.result
+                                });
+                            };
+                            reader.readAsDataURL(file);
+                        }
+                    }
+                },
+                uploadImages() {
+                    const maxConcurrent = 2;
+                    let inProgress = 0;
+                    let index = 0;
+
+                    const uploadNext = () => {
+                        if (index >= this.images.length) return;
+                        if (inProgress >= maxConcurrent) return;
+
+                        const image = this.images[index];
+                        if (image.status !== '等待中') {
+                            index++;
+                            uploadNext();
+                            return;
+                        }
+
+                        inProgress++;
+                        image.status = '上传中';
+
+                        const formData = new FormData();
+                        formData.append('file', image.file, 'blob');
+
+                        fetch('./upload', {
+                            method: 'POST',
+                            headers: {
+                                'Accept': 'application/json, text/javascript, */*; q=0.01',
+                                'X-Requested-With': 'XMLHttpRequest'
+                            },
+                            body: formData
+                        })
+                            .then(response => response.json())
+                            .then(data => {
+                                image.status = '已完成';
+                                if (data && data[0] && data[0].src) {
+                                    const fullUrl = new URL(data[0].src, window.location.href).href;
+                                    this.uploadedUrls.push({
+                                        url: fullUrl,
+                                        preview: image.preview
+                                    });
+                                } else {
+                                    throw new Error('Invalid response format');
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Upload failed:', error);
+                                image.status = '失败';
+                            })
+                            .finally(() => {
+                                inProgress--;
+                                index++;
+                                uploadNext();
+                            });
+
+                        uploadNext();
+                    };
+
+                    for (let i = 0; i < maxConcurrent; i++) {
+                        uploadNext();
+                    }
+                },
+                clearImages() {
+                    this.images = [];
+                    this.uploadedUrls = [];
+                },
+                copyToClipboard(text, event) {
+                    navigator.clipboard.writeText(text).then(() => {
+                        const button = event.target;
+                        const originalText = button.textContent;
+                        button.textContent = '已复制';
+                    }).catch(err => {
+                        console.error('复制失败:', err);
+                    });
+                },
+                copyAllUrls(event) {
+                    const allUrls = this.uploadedUrls.map(result => result.url).join('\n');
+                    navigator.clipboard.writeText(allUrls).then(() => {
+                        this.copyAllButtonText = '已复制全部';
+                    }).catch(err => {
+                        console.error('复制失败:', err);
+                    });
+                }
+            }
+        }
+    </script>
+</body>
+
+</html>
