@@ -1,3 +1,6 @@
+> [!IMPORTANT]
+> 由于Telegraph官方不再支持上传图片，故此项目不再维护，感谢各位的支持。
+> 
 <h1 align="center">Telegraph-Image</h1>
 <p align="center">一个基于Vercel或Nginx搭建的Telegraph图床。</p>
 <hr>
